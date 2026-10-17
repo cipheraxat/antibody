@@ -1,0 +1,37 @@
+[project]
+name = "antibody"
+version = "0.2.0"
+description = "Turn every fix into a verified rule that stops the mistake coming back, enforced on agent edits and in CI."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+dependencies = [
+    "ruamel.yaml>=0.18",
+]
+
+[project.urls]
+Repository = "https://github.com/cipheraxat/antibody"
+
+[project.optional-dependencies]
+# The rule engine. Skip this extra if you already have opengrep or semgrep on PATH.
+semgrep = ["semgrep>=1.100"]
+
+[project.scripts]
+antibody = "antibody.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "semgrep>=1.100",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/antibody"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

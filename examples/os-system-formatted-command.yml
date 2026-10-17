@@ -1,0 +1,40 @@
+rules:
+  - id: os-system-formatted-command
+    message: >-
+      A shell command is built by formatting values into a string and run through a
+      shell. A URL, filename or revision containing shell metacharacters runs arbitrary
+      commands. Pass an argument list to subprocess instead.
+    severity: ERROR
+    languages: [python]
+    patterns:
+      - pattern-either:
+          - pattern: os.system($CMD)
+          - pattern: os.popen($CMD, ...)
+          - pattern: subprocess.$FN($CMD, ..., shell=True, ...)
+      - metavariable-pattern:
+          metavariable: $CMD
+          pattern-either:
+            - pattern: '"..." % $ARGS'
+            - pattern: f"..."
+            - pattern: '"...".format(...)'
+            - pattern: '"..." + $X'
+            - pattern: '$X + "..."'
+    metadata:
+      antibody:
+        source:
+          commit: 88807c7062788254f654ea8c03427adc859321f0
+          summary: "Modernize package_index VCS handling"
+          repo: "https://github.com/pypa/setuptools"
+          advisory: GHSA-cx63-2mw6-8hw5
+        cwe: CWE-78
+        verified:
+          engine: semgrep 1.181.0
+          proof: commit
+          vulnerable: 4a0a9ce58751
+          fixed: 88807c706278
+          fires_on:
+            - setuptools/package_index.py:888
+            - setuptools/package_index.py:892
+            - setuptools/package_index.py:907
+            - setuptools/package_index.py:911
+          at: '2026-10-18'
