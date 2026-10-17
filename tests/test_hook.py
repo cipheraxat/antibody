@@ -44,6 +44,16 @@ def test_old_matches_in_an_edited_file_dont_block(guarded):
     assert hook.claude(edit(report)) == (0, "")
 
 
+def test_nosemgrep_with_the_antibody_id_lets_an_edit_through(guarded):
+    # The hook's message offers this escape hatch, so it has to work despite Semgrep
+    # prefixing local rule ids with their file path.
+    repo, _ = guarded
+    path = repo.write(
+        "app/new.py", 'def q(cur, x):\n    cur.execute(f"SELECT {x}")  # nosemgrep: sql-fstring\n'
+    )
+    assert hook.claude(edit(path)) == (0, "")
+
+
 def test_files_no_antibody_covers_never_start_the_engine(guarded, monkeypatch):
     repo, _ = guarded
     monkeypatch.setattr(hook, "find_engine", lambda *_: pytest.fail("engine started"))

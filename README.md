@@ -28,6 +28,14 @@ Claude Code shows that message to Claude, which fixes the code before moving on.
 `datetime.now()` elsewhere in the repo was accepted in the baseline, so it doesn't block
 anyone.
 
+**In a live session** (Claude Code 2.1.300 with Sonnet), Claude was told to use
+`datetime.utcnow()` *anyway*, "because our serializer expects naive UTC". It made the
+edit and the hook blocked it. Claude named the rule, the line and the commit the lesson
+came from. It didn't silently override the request. It asked whether to keep `utcnow()`
+with `# nosemgrep: naive-datetime` or switch to `datetime.now(timezone.utc)`. Given the
+same task without the insistence, Claude read the antibody's commit and wrote the
+timezone-aware version from the start.
+
 ## Quick start
 
 ```bash
