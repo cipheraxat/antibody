@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+  <title id="title">antibody</title>
+  <g fill="none" stroke="#14b8a6" stroke-linecap="round" stroke-linejoin="round">
+    <!-- heavy chains: the Y -->
+    <path d="M64 114V70L36 30M64 70l28-40" stroke-width="11"/>
+    <!-- light chains alongside each arm -->
+    <path d="M40.8 59.4 25.4 37.4M87.2 59.4l15.4-22" stroke-width="7"/>
+  </g>
+  <!-- binding sites: where an antibody recognizes what it learned -->
+  <circle cx="30.5" cy="25.5" r="6" fill="#f59e0b"/>
+  <circle cx="97.5" cy="25.5" r="6" fill="#f59e0b"/>
+</svg>

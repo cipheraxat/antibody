@@ -1,199 +1,133 @@
-# antibody
+<p align="center">
+  <img src="docs/assets/logo.svg" width="112" alt="antibody logo">
+</p>
 
-**Every bug you fix, and every mistake you correct your coding agent on, becomes a verified
-rule that stops it coming back.**
+<h1 align="center">antibody</h1>
 
-Agents repeat mistakes. So do teams. A note in `CLAUDE.md` is a suggestion, and the
-lesson from a fix is usually gone the moment it merges. `antibody` keeps it. Your coding
-agent drafts a [Semgrep](https://semgrep.dev)-format rule from the fix. `antibody` *proves*
-the rule fires on the mistake and stays silent on the fix. It then enforces the rule on
-every file the agent edits and in CI, with no LLM, no network and no tokens. Only new
-matches count, so turning it on never breaks a build.
+<p align="center">
+  <b>Every fix becomes a rule your AI coding agent can't break.</b>
+</p>
 
-The LLM writes the check once. A deterministic tool runs it from then on.
+<p align="center">
+  <a href="https://pypi.org/project/antibody/"><img src="https://img.shields.io/pypi/v/antibody" alt="PyPI"></a>
+  <a href="https://pypi.org/project/antibody/"><img src="https://img.shields.io/pypi/pyversions/antibody" alt="Python versions"></a>
+  <a href="https://github.com/cipheraxat/antibody/actions/workflows/ci.yml"><img src="https://github.com/cipheraxat/antibody/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
+</p>
 
-## What it looks like
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#supported-tools">Supported tools</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#documentation">Docs</a> ·
+  <a href="docs/examples.md">Examples</a>
+</p>
 
-A fix made timestamps timezone-aware. Later, Claude Code writes `datetime.utcnow()` in
-another file, and the edit hook answers right away:
+---
 
-```
+AI coding agents repeat mistakes, and a line in `AGENTS.md` is only a suggestion.
+**antibody** turns each fix into a small rule, proves it against the real fix, and checks
+every edit your agent makes, with no LLM in the loop.
+
+```text
 antibody: this edit repeats a mistake that was fixed before
-  app/invoices.py:5  [naive-datetime]  This makes a timestamp with no timezone, which breaks comparisons and shifts times across servers. Use datetime.now(timezone.utc).
+  app/invoices.py:5  [naive-datetime]  This makes a timestamp with no timezone, which breaks
+  comparisons and shifts times across servers. Use datetime.now(timezone.utc).
     learned from 95ffe5603abe "Use timezone-aware timestamps in billing"
-Fix the code. Ask the user before suppressing it with `# nosemgrep`.
+Fix the code. Ask the user before suppressing a match with `# nosemgrep`.
 ```
 
-Claude Code shows that message to Claude, which fixes the code before moving on. An old
-`datetime.now()` elsewhere in the repo was accepted in the baseline, so it doesn't block
-anyone.
+<sub>What the agent sees right after it writes <code>datetime.utcnow()</code> again.</sub>
 
-**In a live session** (Claude Code 2.1.300 with Sonnet), Claude was told to use
-`datetime.utcnow()` *anyway*, "because our serializer expects naive UTC". It made the
-edit and the hook blocked it. Claude named the rule, the line and the commit the lesson
-came from. It didn't silently override the request. It asked whether to keep `utcnow()`
-with `# nosemgrep: naive-datetime` or switch to `datetime.now(timezone.utc)`. Given the
-same task without the insistence, Claude read the antibody's commit and wrote the
-timezone-aware version from the start.
+## Why antibody
+
+- **Lessons that stick.** Agents forget between sessions, and rules in prompt files are
+  only suggestions. An antibody is a deterministic check that runs on every edit.
+- **Proven, not guessed.** Your agent drafts a Semgrep-format rule from the fix.
+  `antibody verify` only accepts it if it fires on the old code and stays silent on the fix.
+- **No noise.** Only new matches count, so old code never blocks an edit or breaks a build.
+- **Any tool.** It works with Claude Code, Codex, Gemini CLI, Cursor, GitHub Copilot, any
+  agent that reads AGENTS.md, git hooks and CI.
+
+## Install
+
+```bash
+uv tool install "antibody[semgrep]"     # or: pipx install "antibody[semgrep]"
+```
+
+The `[semgrep]` extra brings the rule engine. If you already use
+[Opengrep](https://github.com/opengrep/opengrep), plain `antibody` is enough.
+
+> [!NOTE]
+> Multi-agent support (0.3.0) isn't on PyPI yet. Until it is, install from GitHub:
+> `uv tool install "antibody[semgrep] @ git+https://github.com/cipheraxat/antibody"`
 
 ## Quick start
 
 ```bash
-# The [semgrep] extra brings the engine along. Leave it off if you already use opengrep.
-uv tool install "antibody[semgrep]"
-
 cd your-repo
-antibody init --agent claude   # .antibodies/, the agent skill, and the edit hook in .claude/settings.json
+antibody init          # .antibodies/, AGENTS.md, the agent skill, and hooks for the agents it finds
 ```
 
-Then, after a fix, ask your agent to *"make an antibody from that fix"*. The skill walks
-it through these steps, which you can also run yourself:
+Fix a bug as usual, then ask your agent to *"make an antibody from that fix."* It runs:
 
 ```bash
-antibody learn                 # learns from uncommitted changes if there are any, else HEAD
-antibody verify <id>           # the proof; iterate on the rule until it passes
-antibody sweep <id>            # every match today: fix the real repeats...
-antibody baseline <id>         # ...and accept the rest, so only new matches fail
+antibody learn         # brief + skeleton from the fix (uncommitted changes, or HEAD)
+antibody verify <id>   # the proof: fires on the mistake, silent on the fix
+antibody sweep <id>    # every repeat in the code today
+antibody baseline <id> # accept what's left, so only new matches fail
 ```
 
-## Three ways to learn
+## Supported tools
 
-| The fix is | Command | What `verify` proves |
+| Tool | How antibody plugs in | Catches a repeat |
 |---|---|---|
-| a commit | `antibody learn <commit>` | Fires near the change in the fix's parent, and never on lines the fix wrote |
-| uncommitted | `antibody learn --id <name>` | The same, `HEAD` against your working tree. After you commit, `verify` pins it to the commit automatically |
-| not in git (the agent made the mistake and fixed it in one session) | `antibody learn --fixtures-only --id <name>` | The fixture: every `ruleid:` line matches, every `ok:` line doesn't |
+| **Claude Code** ✓ | skill + `PostToolUse` hook | right after the edit |
+| **OpenAI Codex** | skill + `PostToolUse` hook | right after the edit |
+| **Gemini CLI** | skill + `AfterTool` hook | right after the edit |
+| **Cursor** | skill + `stop` hook | before the agent ends its turn |
+| **GitHub Copilot** (CLI and cloud agent) | skill + `agentStop` hook | before the agent ends its turn |
+| **Windsurf, Cline, opencode, Amp, Zed, Aider, …** | AGENTS.md + skill + pre-commit hook | at commit |
+| **Any CI** | `antibody check --since origin/main` | on every pull request |
 
-Tests and `.antibodies/` are left out of the proof. Matches the fix left in place are
-reported as possible repeats.
+`antibody init` sets up the tools it detects. Choose them yourself with
+`--agent claude,cursor` or `--agent all`. ✓ means tested in a live session; the others are
+tested against each tool's documented hook format. See [docs/agents.md](docs/agents.md).
 
-## Only new matches fail
+## How it works
 
-- **The edit hook** compares the edited file with `HEAD`. It blocks only mistakes the
-  agent just introduced, never old code it happened to touch.
-- **`antibody baseline`** records today's accepted matches in `.antibodies/baseline.json`,
-  keyed by the matched code rather than line numbers. `antibody check` then fails only on
-  matches beyond it. A pasted copy of an accepted line still counts as new.
-- **`antibody check --since origin/main`** looks only at files changed since a ref. That
-  suits pull requests.
-
-```yaml
-# .github/workflows/antibody.yml (pin actions to commit SHAs in real use)
-on: [pull_request]
-jobs:
-  antibody:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with: { fetch-depth: 0 }
-      - uses: astral-sh/setup-uv@v10
-      - run: uvx --from "antibody[semgrep]==0.2.0" antibody check --since "origin/$GITHUB_BASE_REF"
+```text
+  fix ─► antibody learn ─► agent writes the rule ─► antibody verify ─► checked on every edit,
+                                                    fires on the bug,   commit and pull request
+                                                    silent on the fix
 ```
 
-## The hook
+1. **Learn** from a commit, from uncommitted changes, or, for a mistake that never reached
+   git, from a fixture.
+2. **Prove.** The rule must fire near the change in the old code and never on lines the
+   fix wrote.
+3. **Enforce.** Hooks, pre-commit and CI run the rules with Semgrep or Opengrep. That's
+   about 0.5 s per edit, with no network and no tokens.
 
-`antibody init --agent claude` adds this to `.claude/settings.json`, keeping any hooks
-already there:
+Antibodies are plain Semgrep rules in `.antibodies/`, so they work without antibody too.
 
-```json
-{"hooks": {"PostToolUse": [{"matcher": "Edit|Write", "hooks": [
-  {"type": "command", "command": "antibody", "args": ["hook", "claude"], "timeout": 60,
-   "statusMessage": "antibody: checking edit"}]}]}}
-```
+## Documentation
 
-It takes about **0.5 s** on a file an antibody covers with Semgrep 1.181, **1.4 s** with
-Opengrep 1.31, and **0.25 s** on anything else, measured on an M-series Mac. It exits 2
-with the message above on a new match, which Claude Code shows to Claude. It exits 0 when
-clean, and 1 if something is broken, so a broken hook never blocks your work.
-
-## A security example: setuptools CVE-2024-6345
-
-setuptools formatted package URLs into `os.system` command strings. From the fix
-[`88807c7`](https://github.com/pypa/setuptools/commit/88807c7062788254f654ea8c03427adc859321f0),
-an agent wrote [`examples/os-system-formatted-command.yml`](examples/os-system-formatted-command.yml).
-`antibody verify` confirmed that it catches all four vulnerable calls and none of the
-fixed code. The sweep found no other instances in setuptools. The rule doesn't mention
-setuptools, so it works on any Python codebase.
-
-## Commands
-
-| Command | What it does |
+| Goal | Start here |
 |---|---|
-| `antibody init [--agent claude] [--skill]` | Create `.antibodies/`, plus the skill and edit hook |
-| `antibody learn [commit] [--id ID] [--fixtures-only]` | Write a skeleton and print a brief for the agent |
-| `antibody verify <id>... \| --all` | Prove each antibody; `--fix COMMIT` records the fix, `--no-stamp` leaves files alone |
-| `antibody sweep <id> [paths]` | List every match of one antibody |
-| `antibody baseline [ids]` | Accept today's matches |
-| `antibody check [paths] [--since REF] [--no-baseline] [--sarif FILE]` | New matches from verified antibodies; exit 1 if any |
-| `antibody list` | Antibodies, how each was proven, and their kind |
-| `antibody hook claude` | The edit hook (reads Claude Code's event on stdin) |
+| Set up your coding agent | [docs/agents.md](docs/agents.md) |
+| Write a good antibody | [docs/writing-antibodies.md](docs/writing-antibodies.md) |
+| Run it in CI or pre-commit | [docs/ci.md](docs/ci.md) |
+| Look up a command | [docs/commands.md](docs/commands.md) |
+| See real examples, including a CVE | [docs/examples.md](docs/examples.md) |
 
-All but `hook` take `--repo PATH`. `verify`, `sweep`, `check` and `list` take `--json`.
+## Contributing
 
-## The file format
-
-An antibody is a plain Semgrep rule with its history under `metadata.antibody`, so
-`semgrep scan --config .antibodies --exclude .antibodies` works without antibody.
-
-```yaml
-rules:
-  - id: naive-datetime
-    message: >-
-      This makes a timestamp with no timezone ... Use datetime.now(timezone.utc).
-    severity: ERROR
-    languages: [python]
-    pattern-either:
-      - pattern: datetime.datetime.utcnow()
-      - pattern: datetime.datetime.now()
-    metadata:
-      antibody:
-        kind: bug                        # bug, security or convention
-        source:
-          commit: "95ffe5603abe..."
-          summary: "Use timezone-aware timestamps in billing"
-        verified:                        # written by `antibody verify`
-          engine: semgrep 1.181.0
-          proof: commit
-          vulnerable: 8d7f55689db5
-          fixed: 95ffe5603abe
-          fires_on:
-            - app/billing.py:5
-          at: '2026-10-18'
-```
-
-A file next to it with the same name and a code extension (`naive-datetime.py`) is its
-fixture, in Semgrep's annotation style:
-
-```python
-# ruleid: naive-datetime
-issued = datetime.utcnow()
-# ok: naive-datetime
-issued = datetime.now(timezone.utc)
-```
-
-## Engine
-
-Antibody works with Semgrep CE and [Opengrep](https://github.com/opengrep/opengrep). The
-full test suite passes on Semgrep 1.181 and Opengrep 1.31. It uses the engine installed
-with it (the `[semgrep]` extra) first, then Opengrep, then Semgrep from `PATH`. Pass
-`--engine` or set `$ANTIBODY_ENGINE` (a name or a path) to choose. Both run through their
-fast OCaml CLI, and Semgrep always runs with `--metrics=off`. Python and
-JavaScript/TypeScript are the first targets, and any language the engine supports works.
-
-## Status
-
-v0.2. Next:
-
-- a Claude Code plugin bundling the skill and hook (after a PyPI release)
-- blocking a bad edit *before* it's written (PreToolUse), and hooks for Cursor, Codex and opencode
-- `learn --auto` with the Claude API, for pull-request bots
-- snapshotting agent edits, so corrections are proven against real code rather than fixtures
-
-## Development
+Issues and pull requests are welcome.
 
 ```bash
-uv sync
-uv run pytest      # runs against real git repos and the real engine (~30 s)
+git clone https://github.com/cipheraxat/antibody && cd antibody
+uv sync && uv run pytest     # runs against real git repos and the real engine
 ```
 
 ## License
