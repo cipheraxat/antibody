@@ -1,7 +1,7 @@
 [project]
 name = "antibody"
-version = "0.2.0"
-description = "Turn every fix into a verified rule that stops the mistake coming back, enforced on agent edits and in CI."
+version = "0.3.0"
+description = "Every fix becomes a rule your AI coding agent can't break: verified Semgrep rules enforced on agent edits, commits and CI."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -9,9 +9,30 @@ requires-python = ">=3.10"
 dependencies = [
     "ruamel.yaml>=0.18",
 ]
+keywords = [
+    "ai", "coding-agent", "claude-code", "codex", "cursor", "github-copilot", "gemini-cli",
+    "agents-md", "semgrep", "opengrep", "static-analysis", "lint", "pre-commit",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Security",
+]
 
 [project.urls]
 Repository = "https://github.com/cipheraxat/antibody"
+Documentation = "https://github.com/cipheraxat/antibody/tree/main/docs"
+Issues = "https://github.com/cipheraxat/antibody/issues"
 
 [project.optional-dependencies]
 # The rule engine. Skip this extra if you already have opengrep or semgrep on PATH.

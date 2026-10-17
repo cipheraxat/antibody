@@ -8,10 +8,10 @@ import os
 import shutil
 import sys
 from collections import Counter
-from importlib import resources
 from pathlib import Path, PurePosixPath
 
-from . import __version__, baseline, claude_settings, gitutil, hook
+from . import __version__, agent_config, agents, baseline, gitutil
+from .agents import AGENTS
 from .engine import Engine, EngineError, Finding, find_engine, locations
 from .learn import learn
 from .rules import DIR, Antibody, AntibodyError, discover, init_dir, load, resolve_ref
@@ -49,11 +49,17 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"antibody {__version__}")
     sub = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
 
-    p = sub.add_parser("init", parents=[repo_opt], help=f"create {DIR}/ and set up an agent")
-    p.add_argument(
-        "--agent", choices=["claude"], help="install the skill and the edit hook for this agent"
+    p = sub.add_parser(
+        "init", parents=[repo_opt], help=f"create {DIR}/ and set up your coding agents"
     )
-    p.add_argument("--skill", action="store_true", help="install only the agent skill")
+    p.add_argument(
+        "--agent",
+        metavar="NAMES",
+        help=f"comma-separated, from: {', '.join(AGENTS)}, or all (default: the ones this repo uses)",
+    )
+    p.add_argument(
+        "--git-hook", action="store_true", help="also install a pre-commit hook (any agent, or none)"
+    )
     p.set_defaults(run=cmd_init)
 
     p = sub.add_parser("learn", parents=[repo_opt], help="write a skeleton and a brief from a fix")
@@ -108,7 +114,11 @@ def _parser() -> argparse.ArgumentParser:
         help="run every verified antibody; exit 1 on new matches (for CI)",
     )
     p.add_argument("paths", nargs="*", help="limit the check to these paths")
-    p.add_argument("--since", metavar="REF", help="only check what changed since REF")
+    scope = p.add_mutually_exclusive_group()
+    scope.add_argument("--since", metavar="REF", help="only check what changed since REF")
+    scope.add_argument(
+        "--staged", action="store_true", help="only check what's staged (for a pre-commit hook)"
+    )
     p.add_argument("--no-baseline", action="store_true", help="count accepted matches as new")
     p.add_argument("--include-unverified", action="store_true")
     p.add_argument("--sarif", type=Path, metavar="FILE", help="also write SARIF to FILE")
@@ -120,34 +130,58 @@ def _parser() -> argparse.ArgumentParser:
     p.set_defaults(run=cmd_list)
 
     p = sub.add_parser(
-        "hook", parents=[engine_opt], help="run as an agent's edit hook (event on stdin)"
+        "hook", parents=[engine_opt], help="run as a coding agent's hook (event on stdin)"
     )
-    p.add_argument("agent", choices=["claude"])
+    p.add_argument("agent", choices=AGENTS)
     p.set_defaults(run=cmd_hook)
     return parser
 
 
 def cmd_init(args: argparse.Namespace) -> int:
     repo = gitutil.toplevel(Path(args.repo))
-    done = [f"created {p.relative_to(repo)}" for p in init_dir(repo)]
-    if args.skill or args.agent == "claude":
-        skill = repo / ".claude" / "skills" / "antibody" / "SKILL.md"
-        if not skill.exists():
-            skill.parent.mkdir(parents=True, exist_ok=True)
-            skill.write_text(resources.files("antibody").joinpath("skill/SKILL.md").read_text())
-            done.append(f"created {skill.relative_to(repo)}")
-    if args.agent == "claude":
-        settings = repo / ".claude" / "settings.json"
-        existed = settings.exists()
-        if claude_settings.install_hook(settings):
-            verb = "updated" if existed else "created"
-            done.append(f"{verb} {settings.relative_to(repo)} (runs `antibody hook claude` after edits)")
-        if not shutil.which("antibody"):
-            done.append(
-                "warning: `antibody` isn't on PATH, so the hook can't run yet. "
-                "Install it with `uv tool install`."
-            )
-    print("\n".join(done) or "already set up")
+    if args.agent is None:
+        chosen = agent_config.detect(repo)
+    elif args.agent.strip() == "all":
+        chosen = list(AGENTS)
+    else:
+        chosen = [a.strip() for a in args.agent.split(",") if a.strip()]
+        unknown = [a for a in chosen if a not in AGENTS]
+        if unknown:
+            raise AntibodyError(f"unknown agent {', '.join(unknown)}; pick from {', '.join(AGENTS)}")
+
+    # Any agent: antibodies, the cross-tool skill folder, and AGENTS.md.
+    done = [(str(p.relative_to(repo)), "created") for p in init_dir(repo)]
+    if skill := agent_config.install_skill(repo, agent_config.SKILL_DIRS["any"]):
+        done.append((_rel(skill, repo), "created: the skill, for Codex, Cursor, Copilot, Gemini, opencode"))
+    if state := agent_config.write_agents_md(repo):
+        done.append(("AGENTS.md", f"{state}: instructions any coding agent reads"))
+
+    notes = []
+    for agent in chosen:
+        setup = agent_config.SETUPS[agent]
+        if agent == "claude" and (skill := agent_config.install_skill(repo, agent_config.SKILL_DIRS["claude"])):
+            done.append((_rel(skill, repo), "created: the skill, for Claude Code"))
+        if agent_config.install_hook(repo, agent):
+            done.append((setup.settings, f"{agent} hook: checks {setup.when}"))
+            if setup.trust:
+                notes.append(setup.trust)
+    if args.git_hook:
+        if hook_path := agent_config.install_git_hook(repo):
+            done.append((_rel(hook_path, repo), "created: checks staged changes before each commit"))
+        else:
+            notes.append("A pre-commit hook already exists; add `antibody check --staged` to it.")
+
+    width = max((len(path) for path, _ in done), default=0)
+    print("\n".join(f"{path:<{width}}  {what}" for path, what in done) or "already set up")
+    if not chosen:
+        notes.append(
+            "No coding agent detected. Add hooks with --agent "
+            f"{','.join(AGENTS)} (or all); any agent can still follow AGENTS.md."
+        )
+    if chosen and not shutil.which("antibody"):
+        notes.append("`antibody` isn't on PATH, so hooks can't run yet: `uv tool install \"antibody[semgrep]\"`.")
+    for note in notes:
+        print(f"note: {note}")
     return 0
 
 
@@ -245,8 +279,8 @@ def cmd_baseline(args: argparse.Namespace) -> int:
 
 def cmd_check(args: argparse.Namespace) -> int:
     repo = gitutil.toplevel(Path(args.repo))
-    if args.since and args.sarif:
-        raise AntibodyError("--sarif can't be combined with --since yet")
+    if (args.since or args.staged) and args.sarif:
+        raise AntibodyError("--sarif can't be combined with --since or --staged yet")
     antibodies = [load(p) for p in discover(repo)]
     active = [a for a in antibodies if a.verified or args.include_unverified]
     skipped = len(antibodies) - len(active)
@@ -258,14 +292,17 @@ def cmd_check(args: argparse.Namespace) -> int:
         engine = find_engine(args.engine)
         rules = [a.path for a in active]
         targets = _targets(repo, args.paths)
-        if args.since:
-            rev = gitutil.resolve(repo, args.since)
+        if args.since or args.staged:
+            # Compare what changed with how it was: staged files against HEAD, or the
+            # working tree against REF. Before the first commit, everything is new.
+            rev = gitutil.head(repo) if args.staged else gitutil.resolve(repo, args.since)
+            current = gitutil.INDEX if args.staged else gitutil.WORKTREE
             paths = [
                 c.new_path
-                for c in gitutil.changed_files(repo, rev, gitutil.WORKTREE)
+                for c in gitutil.changed_files(repo, rev or gitutil.EMPTY_TREE, current)
                 if c.new_path and counts_for_proof(c.new_path) and _within(c.new_path, targets)
             ]
-            now, then = baseline.scan_against(engine, rules, repo, rev, paths)
+            now, then = baseline.scan_against(engine, rules, repo, rev, paths, current)
             now = [(key, f) for key, f in now if f.rule_id in ids]
             new = baseline.new_matches(now, then | accepted)
         else:
@@ -351,10 +388,12 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 
 def cmd_hook(args: argparse.Namespace) -> int:
-    code, message = hook.claude(sys.stdin.read(), args.engine)
-    if message:
-        print(message, file=sys.stderr)
-    return code
+    reply = agents.handle(args.agent, sys.stdin.read(), args.engine)
+    if reply.stdout:
+        print(reply.stdout)
+    if reply.stderr:
+        print(reply.stderr, file=sys.stderr)
+    return reply.code
 
 
 def _print_proof(repo: Path, engine: Engine, subject, proof, stamped: bool) -> None:

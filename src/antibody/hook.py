@@ -1,72 +1,94 @@
-"""`antibody hook claude`: a Claude Code PostToolUse hook.
+"""The question every agent hook asks: did the agent just bring back a learned mistake?
 
-After Claude edits a file, run the verified antibodies that cover it. If the edit
-introduced a match (one that isn't in HEAD or in the baseline), exit 2: Claude Code shows
-the message to Claude, which fixes the code before moving on."""
+A match counts only if it is new: not in HEAD's version of the file, and not accepted in
+the baseline. `agents.py` turns the answer into each coding tool's hook protocol."""
 
 from __future__ import annotations
 
-import json
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import baseline, gitutil
-from .engine import EngineError, find_engine
+from .engine import Finding, find_engine
 from .learn import covers
 from .rules import Antibody, AntibodyError, discover, load
 from .verify import counts_for_proof
 
-BLOCK, OK, BROKEN = 2, 0, 1  # exit codes: Claude sees stderr only on 2; 1 tells the user
+CLOSING = "Fix the code. Ask the user before suppressing a match with `# nosemgrep`."
 
 
-def claude(event: str, engine_name: str | None = None) -> tuple[int, str]:
-    """Handle one PostToolUse event; returns (exit code, message for stderr)."""
-    try:
-        file_path = json.loads(event)["tool_input"]["file_path"]
-    except (ValueError, KeyError, TypeError):
-        return OK, ""  # not an edit of a file
-    try:
-        return _check(Path(file_path), engine_name)
-    except (AntibodyError, EngineError, gitutil.GitError, OSError) as e:
-        return BROKEN, f"antibody hook: {e}"
+@dataclass
+class Verdict:
+    new: list[Finding] = field(default_factory=list)
+    antibodies: dict[str, Antibody] = field(default_factory=dict)
+
+    def explain(self, lead: str) -> str:
+        lines = [lead]
+        for finding in self.new:
+            antibody = self.antibodies[finding.rule_id]
+            lines.append(f"  {finding.location}  [{antibody.id}]  {antibody.message}")
+            lines.append(f"    learned from {_origin(antibody)}")
+        lines.append(CLOSING)
+        return "\n".join(lines)
 
 
-def _check(path: Path, engine_name: str | None) -> tuple[int, str]:
-    if not path.is_file():
-        return OK, ""
-    try:
-        repo = gitutil.toplevel(path.parent).resolve()
-        rel = path.resolve().relative_to(repo).as_posix()
-    except (gitutil.GitError, ValueError):
-        return OK, ""  # not in a git repository we can map the file into
-    if not counts_for_proof(rel):
-        return OK, ""
+def check_paths(paths: list[Path], engine_name: str | None = None) -> Verdict:
+    """New matches in these files: what an edit hook asks after the agent writes them."""
+    files = [p for p in paths if p.is_file()]
+    repo = _repo_of(files[0]) if files else None
+    if repo is None:
+        return Verdict()
+    rels = []
+    for path in files:
+        try:
+            rel = path.resolve().relative_to(repo).as_posix()
+        except ValueError:
+            continue  # outside this repository
+        if counts_for_proof(rel):
+            rels.append(rel)
+    return check(repo, rels, engine_name)
 
+
+def check_turn(cwd: Path, engine_name: str | None = None) -> Verdict:
+    """New matches anywhere the working tree differs from HEAD, untracked files included.
+
+    What an end-of-turn hook asks. It sees every edit, including ones made by shell commands."""
+    repo = _repo_of(cwd)
+    head = gitutil.head(repo) if repo else None
+    if head is None:
+        return Verdict()
+    paths = [
+        c.new_path
+        for c in gitutil.changed_files(repo, head, gitutil.WORKTREE)
+        if c.new_path and counts_for_proof(c.new_path)
+    ]
+    return check(repo, paths, engine_name)
+
+
+def check(repo: Path, rels: list[str], engine_name: str | None = None) -> Verdict:
     antibodies: dict[str, Antibody] = {}
     for rule_file in discover(repo):
         try:
             antibody = load(rule_file)
         except AntibodyError:
             continue  # one broken file shouldn't stop the others
-        if antibody.verified and covers(antibody.languages, rel):
+        if antibody.verified and any(covers(antibody.languages, rel) for rel in rels):
             antibodies[antibody.id] = antibody
     if not antibodies:
-        return OK, ""  # nothing applies, so skip the engine entirely
+        return Verdict()  # nothing applies, so the engine never starts
 
     engine = find_engine(engine_name)
     rules = [a.path for a in antibodies.values()]
-    now, at_head = baseline.scan_against(engine, rules, repo, gitutil.head(repo), [rel])
+    now, at_head = baseline.scan_against(engine, rules, repo, gitutil.head(repo), rels)
     now = [(key, f) for key, f in now if f.rule_id in antibodies]
-    new = baseline.new_matches(now, at_head | baseline.load(repo))
-    if not new:
-        return OK, ""
+    return Verdict(baseline.new_matches(now, at_head | baseline.load(repo)), antibodies)
 
-    lines = ["antibody: this edit repeats a mistake that was fixed before"]
-    for finding in new:
-        antibody = antibodies[finding.rule_id]
-        lines.append(f"  {finding.location}  [{antibody.id}]  {antibody.message}")
-        lines.append(f"    learned from {_origin(antibody)}")
-    lines.append("Fix the code. Ask the user before suppressing it with `# nosemgrep`.")
-    return BLOCK, "\n".join(lines)
+
+def _repo_of(path: Path) -> Path | None:
+    try:
+        return gitutil.toplevel(path if path.is_dir() else path.parent).resolve()
+    except gitutil.GitError:
+        return None
 
 
 def _origin(antibody: Antibody) -> str:

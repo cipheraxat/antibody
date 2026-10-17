@@ -1,0 +1,7 @@
+- id: antibody
+  name: antibody
+  description: Stop commits that bring back a mistake an antibody learned.
+  entry: antibody check --staged
+  language: python
+  pass_filenames: false
+  additional_dependencies: ["semgrep>=1.100"]

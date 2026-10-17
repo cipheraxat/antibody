@@ -87,7 +87,7 @@ def test_init_for_claude_adds_the_hook_and_keeps_existing_settings(sqli, capsys)
     repo.write(".claude/settings.json", json.dumps(existing))
 
     code, out = run(capsys, repo, "init", "--agent", "claude")
-    assert code == 0 and "updated .claude/settings.json" in out
+    assert code == 0 and "claude hook: checks after each edit" in out
     data = json.loads(settings.read_text())
     assert data["model"] == "opus"
     groups = data["hooks"]["PostToolUse"]
@@ -98,3 +98,17 @@ def test_init_for_claude_adds_the_hook_and_keeps_existing_settings(sqli, capsys)
 
     run(capsys, repo, "init", "--agent", "claude")  # a second run changes nothing
     assert len(json.loads(settings.read_text())["hooks"]["PostToolUse"]) == 2
+
+
+def test_check_staged_looks_only_at_what_will_be_committed(guarded, capsys):
+    repo, _ = guarded
+    bad = 'def q(cur, x):\n    cur.execute(f"SELECT {x}")\n'
+    staged = repo.write("app/staged.py", bad)
+    repo.git("add", "app/staged.py")
+    staged.write_text("def q(cur, x):\n    cur.execute('SELECT ?', (x,))\n")  # fixed on disk, not staged
+    repo.write("app/unstaged.py", bad)  # never staged
+    code, out = run(capsys, repo, "check", "--staged")
+    assert code == 1
+    assert "app/staged.py:2" in out and "unstaged" not in out
+    repo.git("add", "app/staged.py")  # stage the fix
+    assert run(capsys, repo, "check", "--staged")[0] == 0

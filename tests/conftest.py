@@ -91,3 +91,18 @@ def rule_file(repo: Repo, rule_id: str, body: str, commit: str | None = None) ->
         f"rules:\n  - id: {rule_id}\n    message: test rule\n    severity: ERROR\n"
         f"    languages: [python]\n{body}{source}",
     )
+
+
+FSTRING_SQL = '    pattern: $CUR.execute(f"...", ...)\n'
+
+
+@pytest.fixture
+def guarded(sqli, engine):
+    """The sqli repo with a verified antibody for SQL built from f-strings."""
+    from antibody.rules import load
+    from antibody.verify import prove
+
+    repo, fix = sqli
+    path = rule_file(repo, "sql-fstring", FSTRING_SQL, fix)
+    load(path).write_stamp(prove(load(path), repo.root, engine).stamp(engine))
+    return repo, fix

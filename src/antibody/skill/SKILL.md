@@ -1,6 +1,6 @@
 ---
 name: antibody
-description: Turn a fix into an antibody, a verified Semgrep rule that stops the same mistake coming back, enforced on every edit and in CI with no LLM. Use after fixing a bug, when the user corrects a mistake you could repeat, when given a fix commit or CVE to learn from, or when the antibody hook blocks one of your edits.
+description: Turn a fix into an antibody, a verified Semgrep rule that stops the same mistake coming back, enforced on every edit and in CI with no LLM. Use after fixing a bug, when the user corrects a mistake you could repeat, when given a fix commit or CVE to learn from, or when antibody reports that your changes repeat a learned mistake.
 ---
 
 # Antibody: make a fix permanent
@@ -14,12 +14,16 @@ After you fix a bug, or when the user corrects something you did that could happ
 ("don't use `datetime.utcnow()`", "always go through `tenant_query()`"), ask: *"Want me to
 make this an antibody so it can't come back?"* Don't create one unasked.
 
-## When the hook blocks your edit
+## When antibody reports a repeat
 
-`antibody: this edit repeats a mistake that was fixed before` means your last edit
-introduced code that an antibody matches. The message says what to do instead and which
-fix it was learned from (`git show <commit>` shows that fix). Fix the code. Add
-`# nosemgrep` only if the user agrees the match is intentional.
+Depending on your tool, antibody speaks up right after an edit ("this edit repeats a
+mistake that was fixed before"), when you try to finish a turn ("your changes repeat
+mistakes that were fixed before"), or when you run `antibody check --since HEAD` yourself.
+Run that check after editing code if your tool has no antibody hook.
+
+Each match says what to do instead and which fix it was learned from (`git show <commit>`
+shows that fix). Fix the code. Add `# nosemgrep: <id>` only if the user agrees the match
+is intentional.
 
 ## Making one
 
@@ -65,7 +69,7 @@ fix it was learned from (`git show <commit>` shows that fix). Fix the code. Add
 | `antibody verify <id>` | The proof; records it in the file on success |
 | `antibody sweep <id> [paths]` | Every match in the current code |
 | `antibody baseline [ids]` | Accept today's matches so only new ones fail |
-| `antibody check [--since REF]` | New matches from verified antibodies; exit 1 if any (CI) |
+| `antibody check [--since REF \| --staged]` | New matches from verified antibodies; exit 1 if any |
 | `antibody list` | What's in `.antibodies/` and how each was proven |
 
 Add `--json` to verify, sweep, check and list for machine-readable output, and

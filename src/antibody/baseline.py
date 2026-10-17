@@ -89,16 +89,22 @@ def stale(accepted: Counter[Key], current: Counter[Key], rules: set[str]) -> int
 
 
 def scan_against(
-    engine: Engine, rules: list[Path], repo: Path, rev: str | None, paths: list[str]
+    engine: Engine,
+    rules: list[Path],
+    repo: Path,
+    rev: str | None,
+    paths: list[str],
+    current: str = gitutil.WORKTREE,
 ) -> tuple[Keyed, Counter[Key]]:
-    """Scan `paths` as they are on disk and as they were at `rev`, in one engine run.
+    """Scan `paths` as they are now (on disk, or staged) and as they were at `rev`, in one
+    engine run.
 
     Returns the current matches and a tally of the matches at `rev` (empty if `rev` is None)."""
     with tempfile.TemporaryDirectory(prefix="antibody-") as tmp:
         root = Path(tmp)
         targets = []
         for path in paths:
-            if gitutil.materialize(repo, gitutil.WORKTREE, path, root / "now") is not None:
+            if gitutil.materialize(repo, current, path, root / "now") is not None:
                 targets.append(f"now/{path}")
             if rev and gitutil.materialize(repo, rev, path, root / "then") is not None:
                 targets.append(f"then/{path}")

@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 WORKTREE = "WORKTREE"  # a revision meaning "the files on disk", untracked files included
+INDEX = "INDEX"  # a revision meaning "what is staged for the next commit"
+EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"  # git's empty tree: "before the first commit"
 
 
 class GitError(RuntimeError):
@@ -51,7 +53,9 @@ def head(repo: Path) -> str | None:
 
 
 def short(repo: Path, rev: str) -> str:
-    return "worktree" if rev == WORKTREE else git(repo, "rev-parse", "--short=12", rev).strip()
+    if rev in (WORKTREE, INDEX):
+        return rev.lower()
+    return git(repo, "rev-parse", "--short=12", rev).strip()
 
 
 def subject(repo: Path, rev: str) -> str:
@@ -73,7 +77,9 @@ def origin_url(repo: Path) -> str | None:
 
 
 def changed_files(repo: Path, old: str, new: str) -> list[Change]:
-    """Files that differ between two revisions. `new` may be WORKTREE."""
+    """Files that differ between two revisions. `new` may be WORKTREE or INDEX."""
+    if new == INDEX:
+        return _parse_name_status(git(repo, "diff", "--cached", "--name-status", "-z", "-M", old))
     if new != WORKTREE:
         return _parse_name_status(git(repo, "diff", "--name-status", "-z", "-M", old, new))
     changes = _parse_name_status(git(repo, "diff", "--name-status", "-z", "-M", old))
@@ -110,8 +116,9 @@ def read(repo: Path, rev: str, path: str) -> bytes | None:
     if rev == WORKTREE:
         file = repo / path
         return file.read_bytes() if file.is_file() else None
+    spec = f":{path}" if rev == INDEX else f"{rev}:{path}"
     proc = subprocess.run(
-        ["git", "cat-file", "blob", f"{rev}:{path}"], cwd=repo, capture_output=True, check=False
+        ["git", "cat-file", "blob", spec], cwd=repo, capture_output=True, check=False
     )
     return proc.stdout if proc.returncode == 0 else None
 
