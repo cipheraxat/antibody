@@ -39,8 +39,8 @@ timezone-aware version from the start.
 ## Quick start
 
 ```bash
-# Not on PyPI yet: install from GitHub. The [semgrep] extra brings the engine along.
-uv tool install "antibody[semgrep] @ git+https://github.com/cipheraxat/antibody"
+# The [semgrep] extra brings the engine along. Leave it off if you already use opengrep.
+uv tool install "antibody[semgrep]"
 
 cd your-repo
 antibody init --agent claude   # .antibodies/, the agent skill, and the edit hook in .claude/settings.json
@@ -87,7 +87,7 @@ jobs:
       - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       - uses: astral-sh/setup-uv@v10
-      - run: uvx --from "antibody[semgrep] @ git+https://github.com/cipheraxat/antibody" antibody check --since origin/${{ github.base_ref }}
+      - run: uvx --from "antibody[semgrep]==0.2.0" antibody check --since "origin/$GITHUB_BASE_REF"
 ```
 
 ## The hook
