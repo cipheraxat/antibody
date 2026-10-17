@@ -84,9 +84,9 @@ jobs:
   antibody:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v10
       - run: uvx --from "antibody[semgrep] @ git+https://github.com/cipheraxat/antibody" antibody check --since origin/${{ github.base_ref }}
 ```
 
@@ -101,10 +101,10 @@ already there:
    "statusMessage": "antibody: checking edit"}]}]}}
 ```
 
-It takes about **0.5 s** on a file an antibody covers and **0.25 s** on anything else,
-measured on an M-series Mac with Semgrep 1.181. It exits 2 with the message above on a new
-match, which Claude Code shows to Claude. It exits 0 when clean, and 1 if something is
-broken, so a broken hook never blocks your work.
+It takes about **0.5 s** on a file an antibody covers with Semgrep 1.181, **1.4 s** with
+Opengrep 1.31, and **0.25 s** on anything else, measured on an M-series Mac. It exits 2
+with the message above on a new match, which Claude Code shows to Claude. It exits 0 when
+clean, and 1 if something is broken, so a broken hook never blocks your work.
 
 ## A security example: setuptools CVE-2024-6345
 
@@ -173,10 +173,12 @@ issued = datetime.now(timezone.utc)
 
 ## Engine
 
-Antibody runs [Opengrep](https://github.com/opengrep/opengrep) if it's on `PATH`.
-Otherwise it uses Semgrep CE, through its fast OCaml CLI, always with `--metrics=off`.
-Pass `--engine` or set `$ANTIBODY_ENGINE` to choose. Python and JavaScript/TypeScript are
-the first targets, and any language the engine supports works.
+Antibody works with Semgrep CE and [Opengrep](https://github.com/opengrep/opengrep). The
+full test suite passes on Semgrep 1.181 and Opengrep 1.31. It uses the engine installed
+with it (the `[semgrep]` extra) first, then Opengrep, then Semgrep from `PATH`. Pass
+`--engine` or set `$ANTIBODY_ENGINE` (a name or a path) to choose. Both run through their
+fast OCaml CLI, and Semgrep always runs with `--metrics=off`. Python and
+JavaScript/TypeScript are the first targets, and any language the engine supports works.
 
 ## Status
 

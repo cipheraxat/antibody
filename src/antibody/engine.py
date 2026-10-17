@@ -71,10 +71,10 @@ class Engine:
         if sarif:
             args.append(f"--sarif-output={sarif}")
         args += targets if targets is not None else ["."]
-        if self.name == "semgrep" and not sarif:
-            # Semgrep's OCaml CLI starts about 10x faster than its Python one, which matters in
-            # an edit hook. It skips --sarif-output silently, and if it refuses anything else we
-            # fall back to the Python CLI.
+        if not sarif:
+            # Both engines' OCaml CLI (--experimental) starts several times faster than the
+            # Python one, which matters in an edit hook. It skips --sarif-output silently, and
+            # if it refuses anything else we fall back to the Python CLI.
             try:
                 return self._run(["scan", "--experimental", *args], root)
             except EngineError:
@@ -109,25 +109,33 @@ class Engine:
 
 
 def find_engine(name: str | None = None) -> Engine:
-    """Opengrep if installed, else Semgrep. `name` or $ANTIBODY_ENGINE forces a choice."""
+    """`name` or $ANTIBODY_ENGINE if given. Otherwise the engine installed with antibody (the
+    [semgrep] extra), then opengrep, then semgrep from PATH."""
     wanted = name or os.environ.get("ANTIBODY_ENGINE")
-    for candidate in [wanted] if wanted else ["opengrep", "semgrep"]:
-        binary = _locate(candidate)
-        if binary:
-            family = "opengrep" if "opengrep" in Path(binary).name else "semgrep"
-            return Engine(family, binary)
     if wanted:
-        raise EngineError(f"rule engine {wanted!r} not found")
+        binary = _beside(wanted) or _on_path(wanted)
+        if not binary:
+            raise EngineError(f"rule engine {wanted!r} not found")
+        return _engine(binary)
+    for binary in (_beside("semgrep"), _beside("opengrep"), _on_path("opengrep"), _on_path("semgrep")):
+        if binary:
+            return _engine(binary)
     raise EngineError(
         "no rule engine found: install opengrep, or reinstall with `uv tool install 'antibody[semgrep]'`"
     )
 
 
-def _locate(name: str) -> str | None:
+def _engine(binary: str) -> Engine:
+    return Engine("opengrep" if "opengrep" in Path(binary).name else "semgrep", binary)
+
+
+def _beside(name: str) -> str | None:
+    # An engine installed as our own extra sits beside the interpreter and may not be on PATH.
+    beside = Path(sys.executable).parent / name
+    return str(beside) if "/" not in name and beside.is_file() else None
+
+
+def _on_path(name: str) -> str | None:
     if "/" in name or os.sep in name:
         return name if Path(name).is_file() else None
-    # Installed as our own [semgrep] extra, it sits beside the interpreter and may not be on PATH.
-    beside = Path(sys.executable).parent / name
-    if beside.is_file():
-        return str(beside)
     return shutil.which(name)
