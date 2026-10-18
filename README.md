@@ -23,6 +23,12 @@
   <a href="docs/examples.md">Examples</a>
 </p>
 
+<p align="center">
+  <a href="docs/assets/antibody-tutorial.mp4">
+    <img src="docs/assets/tutorial-poster.jpg" alt="antibody tutorial: the agent repeats a fixed mistake and the edit hook catches it right away. Click to watch.">
+  </a>
+</p>
+
 ---
 
 AI coding agents repeat mistakes, and a line in `AGENTS.md` is only a suggestion.
