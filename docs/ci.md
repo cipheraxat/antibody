@@ -21,10 +21,6 @@ shrink.
 
 ## GitHub Actions
 
-> [!NOTE]
-> The examples below pin 0.3.0, which isn't on PyPI or tagged yet. Until it is, use
-> `--from "antibody[semgrep] @ git+https://github.com/cipheraxat/antibody"` and `rev: main`.
-
 ```yaml
 # .github/workflows/antibody.yml (pin actions to commit SHAs in real use)
 on: [pull_request]

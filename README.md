@@ -58,10 +58,6 @@ uv tool install "antibody[semgrep]"     # or: pipx install "antibody[semgrep]"
 The `[semgrep]` extra brings the rule engine. If you already use
 [Opengrep](https://github.com/opengrep/opengrep), plain `antibody` is enough.
 
-> [!NOTE]
-> Multi-agent support (0.3.0) isn't on PyPI yet. Until it is, install from GitHub:
-> `uv tool install "antibody[semgrep] @ git+https://github.com/cipheraxat/antibody"`
-
 ## Quick start
 
 ```bash
