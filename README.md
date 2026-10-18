@@ -23,11 +23,7 @@
   <a href="docs/examples.md">Examples</a>
 </p>
 
-<p align="center">
-  <a href="https://cdn.jsdelivr.net/gh/cipheraxat/antibody@main/docs/assets/antibody-tutorial.mp4">
-    <img src="docs/assets/tutorial-poster.jpg" alt="antibody tutorial: the agent repeats a fixed mistake and the edit hook catches it right away. Click to watch.">
-  </a>
-</p>
+https://github.com/user-attachments/assets/5b0fc63c-52ac-4e35-889b-e1fa8cfdeecb
 
 ---
 

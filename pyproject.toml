@@ -54,8 +54,5 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/antibody"]
 
-[tool.hatch.build.targets.sdist]
-exclude = ["docs/assets/*.mp4", "docs/assets/*.jpg"]  # the README's video and its poster
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
