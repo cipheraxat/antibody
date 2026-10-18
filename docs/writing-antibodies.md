@@ -23,6 +23,9 @@ Match only the known mistake first, then generalize one element at a time:
 - **A check missing before a call:** `pattern-not-inside` for the check.
 - **Untrusted input reaching a dangerous call:** `mode: taint`, with the fix's guard as a
   sanitizer.
+- **A project convention:** match the raw form, and `pattern-not-inside` the one place
+  allowed to use it. [The example below](#the-file-format) matches `$MODEL.query` on any
+  model, except inside the `for_tenant()` helper.
 - **Don't anchor on names that exist only in this diff**, unless the mistake really is
   specific to that API. Rules fitted that closely to one diff pass verification and then
   catch nothing.
@@ -33,13 +36,17 @@ and what to do instead.
 ## 3. Add a fixture
 
 A file next to the rule, with the same name and a code extension, in Semgrep's
-annotation style:
+annotation style. For a fix that replaced `Invoice.query.all()` with
+`for_tenant(Invoice, tenant_id).all()`, `.antibodies/unscoped-query.py` is:
 
 ```python
-# ruleid: naive-datetime
-issued = datetime.utcnow()
-# ok: naive-datetime
-issued = datetime.now(timezone.utc)
+from app.db import for_tenant
+from app.models import Invoice
+
+# ruleid: unscoped-query
+invoices = Invoice.query.all()
+# ok: unscoped-query
+invoices = for_tenant(Invoice, tenant_id).all()
 ```
 
 Every match in the fixture must be annotated. Use `//` comments in JS and TS.
@@ -62,29 +69,31 @@ An antibody is a plain Semgrep rule with its history under `metadata.antibody`, 
 
 ```yaml
 rules:
-  - id: naive-datetime
+  - id: unscoped-query
     message: >-
-      This makes a timestamp with no timezone, which breaks comparisons and shifts times
-      across servers. Use datetime.now(timezone.utc).
+      Unscoped query: it can return other tenants' rows.
+      Start from for_tenant(Model, tenant_id).
     severity: ERROR
     languages: [python]
-    pattern-either:
-      - pattern: datetime.datetime.utcnow()
-      - pattern: datetime.datetime.now()
+    patterns:
+      - pattern: $MODEL.query
+      - pattern-not-inside: |
+          def for_tenant(...):
+              ...
     metadata:
       antibody:
-        kind: bug                        # bug, security or convention
+        kind: convention                 # bug, security or convention
         source:
-          commit: "95ffe5603abe..."
-          summary: "Use timezone-aware timestamps in billing"
+          commit: "882ae4a0860c6ad0f12ae4816260447b20f35b45"
+          summary: "Scope invoice queries to the tenant"
         verified:                        # written by `antibody verify`
           engine: semgrep 1.181.0
           proof: commit                  # commit, worktree or fixtures
-          vulnerable: 8d7f55689db5
-          fixed: 95ffe5603abe
+          vulnerable: 23c71b8f8a34
+          fixed: 882ae4a0860c
           fires_on:
-            - app/billing.py:5
-          at: '2026-10-18'
+            - app/billing.py:10
+          at: '2026-10-19'
 ```
 
 ## Engines

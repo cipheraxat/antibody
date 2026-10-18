@@ -31,13 +31,14 @@ every edit your agent makes, with no LLM in the loop.
 
 ```text
 antibody: this edit repeats a mistake that was fixed before
-  app/invoices.py:5  [naive-datetime]  This makes a timestamp with no timezone, which breaks
-  comparisons and shifts times across servers. Use datetime.now(timezone.utc).
-    learned from 95ffe5603abe "Use timezone-aware timestamps in billing"
+  app/invoices.py:9  [unscoped-query]  Unscoped query: it can return other tenants' rows.
+  Start from for_tenant(Model, tenant_id).
+    learned from 882ae4a0860c "Scope invoice queries to the tenant"
 Fix the code. Ask the user before suppressing a match with `# nosemgrep`.
 ```
 
-<sub>What the agent sees right after it writes <code>datetime.utcnow()</code> again.</sub>
+<sub>What the agent sees right after it writes <code>Invoice.query</code> again. Here every query must
+go through the app's own <code>for_tenant()</code>, a rule no linter ships with.</sub>
 
 ## Why antibody
 
