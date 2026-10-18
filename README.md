@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/logo.svg" width="112" alt="antibody logo">
+  <img src="docs/assets/logo.svg" width="120" alt="antibody logo">
 </p>
 
 <h1 align="center">antibody</h1>
